@@ -305,6 +305,10 @@ namespace SimTK {
         const Real cf = parameters.cf;
         const Real bd = parameters.bd;
         const Real bv = parameters.bv;
+
+        // Half space boundaries
+        double hs_boundaries[4] = { -0.5, 0.5, -0.5, 0.5 };
+
         // Calculate the Hertz force.
         const Real k = (1. / 2.) * std::pow(stiffness, 2. / 3.);
         const Real fh_pos = (4. / 3.) * k * std::sqrt(contactSphereRadius * k) *
@@ -333,7 +337,24 @@ namespace SimTK {
         // Assume the half-space is partially closed, with an edge at x=1. Thus
         // for x>1 apply a boundary function to shunt the calculated contact
         // force towards zero.
-        force = force * (0.5 + 0.5 * std::tanh(-1e6 * (contactSphereOriginInGround[0] - 1)));
+        Real contact_sphere_edge_pos[4];
+        contact_sphere_edge_pos[0] = contactSphereOriginInGround[0] 
+            + contactSphereRadius; // xmin
+        contact_sphere_edge_pos[1] = contactSphereOriginInGround[0] 
+            - contactSphereRadius; // xmax
+        contact_sphere_edge_pos[2] = contactSphereOriginInGround[2] 
+            + contactSphereRadius; // zmin
+        contact_sphere_edge_pos[3] = contactSphereOriginInGround[2] 
+            - contactSphereRadius; // zmax
+        force = force 
+            * (0.5 + 0.5 * std::tanh(1e6 *
+                (contact_sphere_edge_pos[0] - hs_boundaries[0])))
+            * (0.5 + 0.5 * std::tanh(-1e6 * 
+                (contact_sphere_edge_pos[1] - hs_boundaries[1])))
+            * (0.5 + 0.5 * std::tanh(1e6 *
+                (contact_sphere_edge_pos[2] - hs_boundaries[2])))
+            * (0.5 + 0.5 * std::tanh(-1e6 *
+                (contact_sphere_edge_pos[3] - hs_boundaries[3])));
         
         // Apply the force to the bodies.
         bodySphere.applyForceToBodyPoint(state, station1, -force, bodyForces);

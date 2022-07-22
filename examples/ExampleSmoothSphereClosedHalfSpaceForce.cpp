@@ -7,7 +7,7 @@
  * Medical Research, grant U54 GM072970. See https://simtk.org/home/simbody.  *
  *                                                                            *
  * Portions copyright (c) 2008-19 Stanford University and the Authors.        *
- * Authors: Antoine Falisse, Gil Serrancoli                                   *
+ * Authors: Prasanna Sritharan, Antoine Falisse, Gil Serrancoli               *
  * Contributors: Peter Eastman                                                *
  *                                                                            *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may    *
@@ -21,33 +21,41 @@
  * limitations under the License.                                             *
  * -------------------------------------------------------------------------- */
 
-#include "SimTKsimbody.h"
+#include "Simbody.h"
 
 using namespace SimTK;
 using namespace std;
 
-const Real TOL = 1e-10;
 
-#define ASSERT(cond) {SimTK_ASSERT_ALWAYS(cond, "Assertion failed");}
+// Report the contact forces
+class MyForceReporter : public PeriodicEventReporter {
+public:
+    MyForceReporter(const MultibodySystem& system, Real period)
+        : PeriodicEventReporter(period), system(system) {}
 
-template <class T>
-void assertEqual(T val1, T val2) {
-    ASSERT(abs(val1-val2) < TOL);
-}
+    virtual void handleEvent(const State& state) const override {
 
-template <int N>
-void assertEqual(Vec<N> val1, Vec<N> val2) {
-    for (int i = 0; i < N; ++i)
-        ASSERT(abs(val1[i]-val2[i]) < TOL);
-}
+        cout << "\nt=" << state.getTime() << endl;
+        for (int b = 1; b <= 9; ++b) {
+            cout << "\tF[" << b << "]=" << Vec3(system.getRigidBodyForces(state, Stage::Dynamics)[b][1]) << endl;
+        }
+    }
+private:
+    const MultibodySystem& system;
+};
 
-void testForces() {
+
+int main() {
+
+    // Create the universe
     MultibodySystem system;
     SimbodyMatterSubsystem matter(system);
     GeneralForceSubsystem forces(system);
     const Vec3 gravity = Vec3(0, -9.8, 0);
     Force::UniformGravity(forces, matter, gravity, 0);
-    const Real radius = 0.8;
+
+    // Define properties of the contact sphere and half space
+    const Real radius = 0.1;
     const Real k = 1500.0;
     const Real stiffness = 0.5*std::pow(k, 2.0/3.0);
     const Real dissipation = 0.5;
@@ -59,49 +67,89 @@ void testForces() {
     const Real bd = 300;
     const Real bv = 50;
 
-    Body::Rigid body1(MassProperties(1.0, Vec3(0), Inertia(1)));
-    MobilizedBody::Translation sphere(matter.updGround(),
-        Transform(), body1, Transform());
-
-    Body::Rigid body2(MassProperties(1.0, Vec3(0), Inertia(1)));
-    MobilizedBody::Free halfSpace(matter.updGround(),
-        Transform(), body2, Transform());
-
-    SmoothSphereClosedHalfSpaceForce hc_smooth(forces);
-
-    hc_smooth.setParameters(k,dissipation,us,ud,uv,vt,cf,bd,bv);
-    hc_smooth.setContactSphereBody(sphere);
-    hc_smooth.setContactSphereLocationInBody(Vec3(0));
-    hc_smooth.setContactSphereRadius(radius);
-    Transform testFrame(Rotation(-0.5*Pi, ZAxis), Vec3(0));
-    hc_smooth.setContactHalfSpaceFrame(testFrame);
-    hc_smooth.setContactHalfSpaceBody(halfSpace);
-    State state = system.realizeTopology();
+    // Create several bodies and attach contact spheres
+    const int nspheres = 9;
+    Body::Rigid bodies[nspheres];
+    MobilizedBody::Translation spheres[nspheres];
+    for (int b = 0; b < nspheres; ++b) {
+        Body::Rigid body(MassProperties(1.0, Vec3(0), Inertia(1)));
+        MobilizedBody::Translation sphere(matter.updGround(),
+            Transform(), body, Transform());
+        sphere.addBodyDecoration(Transform(), DecorativeSphere(radius));
+        bodies[b] = body;
+        spheres[b] = sphere;
+    }
     
-    // Position the sphere at a variety of positions and see if the normal
-    // force is correct.
-    Vec3 cforce(0, 0, 0);
-    for (Real x = 0; x < 2; x += 0.1) {
-        sphere.setQToFitTranslation(state, Vec3(x, 0.2, 0));
-        system.realize(state, Stage::Dynamics);
-        cforce = system.getRigidBodyForces(state, Stage::Dynamics)
-            [sphere.getMobilizedBodyIndex()][1];
 
-        cout << "x=" << x << ":\t" << "force=" << cforce << endl;
+    // Create a body and attach the closed half space
+    Body::Rigid bodyhs1(MassProperties(0, Vec3(0, 0, 0), Inertia(0)));
+    MobilizedBody::Weld halfspace1(matter.updGround(),
+        Transform(Rotation(), Vec3(0, 0.5, 0)), bodyhs1, Transform());
+    halfspace1.addBodyDecoration(Transform(), 
+        DecorativeBrick(Vec3(0.5, 0, 0.5)).setColor(Red));
+
+    // Create a body and attach the open half space
+    Body::Rigid bodyhs2(MassProperties(0, Vec3(0), Inertia(0)));
+    MobilizedBody::Weld halfspace2(matter.updGround(),
+        Transform(), bodyhs2, Transform());
+    //halfspace2.addBodyDecoration(Transform(),
+    //    DecorativeBrick(Vec3(5, 0, 5)).setColor(Yellow));
+
+
+    // Model contact between the spheres and closed half space using smooth 
+    // Hunt-Crossley forces
+    for (int b = 0; b < nspheres; ++b) {
+        SmoothSphereClosedHalfSpaceForce hc_smooth(forces);
+        hc_smooth.setParameters(k, dissipation, us, ud, uv, vt, cf, bd, bv);
+        hc_smooth.setContactSphereBody(spheres[b]);
+        hc_smooth.setContactSphereLocationInBody(Vec3(0));
+        hc_smooth.setContactSphereRadius(radius);
+        hc_smooth.setContactHalfSpaceFrame(Transform(
+            Rotation(-0.5 * Pi, ZAxis), Vec3(0)));
+        hc_smooth.setContactHalfSpaceBody(halfspace1);
+    }
+ 
+    // Model contact between the spheres and open half space using smooth 
+    // Hunt-Crossley forces
+    for (int b = 0; b < nspheres; ++b) {
+        SmoothSphereHalfSpaceForce hc_smooth(forces);
+        hc_smooth.setParameters(k, dissipation, us, ud, uv, vt, cf, bd, bv);
+        hc_smooth.setContactSphereBody(spheres[b]);
+        hc_smooth.setContactSphereLocationInBody(Vec3(0));
+        hc_smooth.setContactSphereRadius(radius);
+        hc_smooth.setContactHalfSpaceFrame(Transform(
+            Rotation(-0.5 * Pi, ZAxis), Vec3(0)));
+        hc_smooth.setContactHalfSpaceBody(halfspace2);
     }
 
+    // Create a visualiser, also report contact forces
+    Visualizer viz(system);
+    viz.setBackgroundType(Visualizer::BackgroundType(Visualizer::GroundAndSky));
+    //viz.setBackgroundColor(White);
+    system.addEventReporter(new Visualizer::Reporter(viz, 0.01));
+    system.addEventReporter(new MyForceReporter(system, 0.01));
 
+    // Construct the system and return the default state
+    State state = system.realizeTopology();
+    system.realizeModel(state);
+
+    // Initialise the state of the sphere
+    std::array<double, nspheres> init_x
+        = { -1., -0.5, 0, 0, 0, 0, 0, 0.5, 1. };
+    std::array<double, nspheres> init_z 
+        = { 0, 0, -0.5, -1., 0, 0.5, 1., 0, 0 };
+    double init_y = 1.5;
+    for (int b = 0; b < nspheres; ++b) {
+        Vec3 init_pos = { init_x[b], init_y, init_z[b] };
+        spheres[b].setQFromVector(state, Vector(init_pos));
+    }
+    
+    // Simulate and report forces
+    RungeKuttaMersonIntegrator integ(system);
+    integ.setAccuracy(Real(1e-3));
+    TimeStepper ts(system, integ);
+    ts.initialize(state); // set IC's
+    ts.stepTo(1.0);
 
 }
 
-int main() {
-    try {
-        testForces();
-    }
-    catch(const std::exception& e) {
-        cout << "exception: " << e.what() << endl;
-        return 1;
-    }
-    cout << "Done" << endl;
-    return 0;
-}

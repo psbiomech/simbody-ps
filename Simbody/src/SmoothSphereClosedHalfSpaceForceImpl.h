@@ -59,6 +59,7 @@ namespace SimTK {
         MobilizedBody   bodyHalfSpace;
         Parameters      parameters;
 
+
         SmoothSphereClosedHalfSpaceForceImpl(GeneralForceSubsystem& subsystem);
 
         SmoothSphereClosedHalfSpaceForceImpl* clone() const override {
