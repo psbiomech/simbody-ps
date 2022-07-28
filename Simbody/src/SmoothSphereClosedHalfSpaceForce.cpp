@@ -7,7 +7,7 @@
  * Medical Research, grant U54 GM072970. See https://simtk.org/home/simbody.  *
  *                                                                            *
  * Portions copyright (c) 2008-19 Stanford University and the Authors.        *
- * Authors: Antoine Falisse, Gil Serrancoli                                   *
+ * Authors: Prasanna Sritharan, Antoine Falisse, Gil Serrancoli               *
  * Contributors: Peter Eastman                                                *
  *                                                                            *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may    *
@@ -334,9 +334,10 @@ namespace SimTK {
         const Real ff = fhc_smooth * (std::min(vrel, Real(1)) *
             (ud + 2 * (us - ud) / (1 + vrel * vrel)) + uv * vslip);
         force += ff * (vtangent) / vslip;
-        // Assume the half-space is partially closed, with an edge at x=1. Thus
-        // for x>1 apply a boundary function to shunt the calculated contact
-        // force towards zero.
+        // Assume the half-space is a closed rectangle with corners given by:
+        // (x0, z0), (x1, z0), (x0, z1), (x1, z1), where:
+        // x0 = hs_boundaries[0], x1 = hs_boundaries[1]
+        // z0 = hs_boundaries[2], z1 = hs_boundaries[3]
         Real contact_sphere_edge_pos[4];
         contact_sphere_edge_pos[0] = contactSphereOriginInGround[0] 
             + contactSphereRadius; // xmin
