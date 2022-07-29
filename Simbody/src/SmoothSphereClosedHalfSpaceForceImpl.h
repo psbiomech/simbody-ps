@@ -38,18 +38,23 @@ namespace SimTK {
         public:
             Parameters() : stiffness(1), dissipation(0), staticFriction(0),
                 dynamicFriction(0), viscousFriction(0), transitionVelocity(0.01),
-                cf(1e-5), bd(300), bv(50) {
+                cf(1e-5), bd(300), bv(50), fpTanhCoeff(1E6), 
+                fpCorner1(Vec3(-0.5, 0, 0.5)), fpCorner2(Vec3(0.5, 0, -0.5)) {
             }
             Parameters(Real stiffness, Real dissipation, Real staticFriction,
                 Real dynamicFriction, Real viscousFriction,
-                Real transitionVelocity, Real cf, Real bd, Real bv) :
+                Real transitionVelocity, Real cf, Real bd, Real bv, Real fpTanhCoeff,
+                Vec3 fpCorner1, Vec3 fpCorner2) :
                 stiffness(stiffness), dissipation(dissipation),
                 staticFriction(staticFriction), dynamicFriction(dynamicFriction),
                 viscousFriction(viscousFriction),
-                transitionVelocity(transitionVelocity), cf(cf), bd(bd), bv(bv) {
+                transitionVelocity(transitionVelocity), cf(cf), bd(bd), bv(bv),
+                fpTanhCoeff(fpTanhCoeff), fpCorner1(fpCorner1), 
+                fpCorner2(fpCorner2) {
             }
             Real stiffness, dissipation, staticFriction, dynamicFriction,
-                viscousFriction, transitionVelocity, cf, bd, bv;
+                viscousFriction, transitionVelocity, cf, bd, bv, fpTanhCoeff;
+            Vec3 fpCorner1, fpCorner2;
         };
 
         Real            contactSphereRadius;
@@ -68,7 +73,8 @@ namespace SimTK {
         // Set the contact material parameters.
         void setParameters(Real stiffness, Real dissipation, Real staticFriction,
             Real dynamicFriction, Real viscousFriction, Real transitionVelocity,
-            Real cf, Real bd, Real bv);
+            Real cf, Real bd, Real bv, Real fpTanhCoeff, 
+            Vec3 fpCorner1, Vec3 fpCorner2);
         // Get parameters.
         const Parameters& getParameters() const;
         // Update parameters.
@@ -96,6 +102,10 @@ namespace SimTK {
         // the tanh used to smooth the Hunt-Crossley force. The larger the steeper
         // the transition but also the more discontinuous, default is 50.
         void setHuntCrossleySmoothing(Real bv);
+        // Set the coefficient of the tanh boundary function arguments
+        void setFPTanhCoeff(Real fpTanhCoeff);
+        // Set the diagnoal corners of the platform
+        void setFPDiagonalCorners(Vec3 fpCorner1, Vec3 fpCorner2);
         // Set the MobilizedBody to which the contact sphere is attached.
         void setContactSphereBody(MobilizedBody bodyInput1);
         // Set the location of the contact sphere in the body frame.

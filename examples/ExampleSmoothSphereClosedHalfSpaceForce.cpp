@@ -23,6 +23,8 @@
 
 #include "Simbody.h"
 
+#include <cmath>
+
 using namespace SimTK;
 using namespace std;
 
@@ -54,9 +56,9 @@ int main() {
     const Vec3 gravity = Vec3(0, -9.8, 0);
     Force::UniformGravity(forces, matter, gravity, 0);
 
-    // Define properties of the contact sphere and half space
+    // Define properties of the contact sphere and half spaces
     const Real radius = 0.1;
-    const Real k = 1500.0;
+    const Real k = 1E6;
     const Real stiffness = 0.5*std::pow(k, 2.0/3.0);
     const Real dissipation = 0.5;
     const Real us = 1.0;
@@ -66,6 +68,26 @@ int main() {
     const Real cf = 1e-5;
     const Real bd = 300;
     const Real bv = 50;
+
+    // Define the diagonal corners of the closed half space and the
+    // coefficient of the tanh argument
+    const Vec3 fpC1(-0.5, 0.5, -0.5);
+    const Vec3 fpC2(0.5, 1, 0.5);
+    const Real fpcoeff = 1E6;
+
+    // Platform dimensions, orientation and centre
+    Vec3 fpcentre = fpC1 + (fpC2 - fpC1) / 2;
+    Real fpxlen = sqrt(pow(abs(fpC2[0] - fpC1[0]), 2) + pow(abs(fpC2[1] - fpC1[1]), 2));
+    Real fpzlen = sqrt(pow(abs(fpC2[2] - fpC1[2]), 2) + pow(abs(fpC2[1] - fpC1[1]), 2));
+    Vec3 fpdims(fpxlen, 0, fpzlen);
+    Real fpxrot = atan((fpC2[1] - fpC1[1]) / (fpC2[2] - fpC1[2]));
+    Real fpzrot = atan((fpC2[1] - fpC1[1]) / (fpC2[0] - fpC1[0]));
+    Vec3 fpangles(fpxrot, 0, fpzrot);
+    Rotation fporient;
+    fporient.setRotationFromAngleAboutX(fpxrot);
+    fporient.setRotationFromAngleAboutY(0);
+    fporient.setRotationFromAngleAboutZ(fpzrot);
+
 
     // Create several bodies and attach contact spheres
     const int nspheres = 9;
@@ -84,9 +106,9 @@ int main() {
     // Create a body and attach the closed half space
     Body::Rigid bodyhs1(MassProperties(0, Vec3(0, 0, 0), Inertia(0)));
     MobilizedBody::Weld halfspace1(matter.updGround(),
-        Transform(Rotation(), Vec3(0, 0.5, 0)), bodyhs1, Transform());
-    halfspace1.addBodyDecoration(Transform(), 
-        DecorativeBrick(Vec3(0.5, 0, 0.5)).setColor(Red));
+        Transform(fporient, fpcentre), bodyhs1, Transform());
+    halfspace1.addBodyDecoration(Transform(),
+        DecorativeBrick(fpdims / 2).setColor(Red));
 
     // Create a body and attach the open half space
     Body::Rigid bodyhs2(MassProperties(0, Vec3(0), Inertia(0)));
@@ -100,7 +122,8 @@ int main() {
     // Hunt-Crossley forces
     for (int b = 0; b < nspheres; ++b) {
         SmoothSphereClosedHalfSpaceForce hc_smooth(forces);
-        hc_smooth.setParameters(k, dissipation, us, ud, uv, vt, cf, bd, bv);
+        hc_smooth.setParameters(k, dissipation, us, ud, uv, vt, cf, bd, bv,
+            fpcoeff, fpC1, fpC2);
         hc_smooth.setContactSphereBody(spheres[b]);
         hc_smooth.setContactSphereLocationInBody(Vec3(0));
         hc_smooth.setContactSphereRadius(radius);
@@ -138,7 +161,7 @@ int main() {
         = { -1., -0.5, 0, 0, 0, 0, 0, 0.5, 1. };
     std::array<double, nspheres> init_z 
         = { 0, 0, -0.5, -1., 0, 0.5, 1., 0, 0 };
-    double init_y = 1.5;
+    double init_y = 2;
     for (int b = 0; b < nspheres; ++b) {
         Vec3 init_pos = { init_x[b], init_y, init_z[b] };
         spheres[b].setQFromVector(state, Vector(init_pos));
@@ -149,7 +172,7 @@ int main() {
     integ.setAccuracy(Real(1e-3));
     TimeStepper ts(system, integ);
     ts.initialize(state); // set IC's
-    ts.stepTo(1.0);
+    ts.stepTo(5.0);
 
 }
 

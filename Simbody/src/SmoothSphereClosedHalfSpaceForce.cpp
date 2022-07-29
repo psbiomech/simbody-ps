@@ -52,17 +52,19 @@ namespace SimTK {
     void SmoothSphereClosedHalfSpaceForce::setParameters
     (Real stiffness, Real dissipation, Real staticFriction,
         Real dynamicFriction, Real viscousFriction, Real transitionVelocity, Real
-        cf, Real bd, Real bv) {
+        cf, Real bd, Real bv, Real fpTanhCoeff, Vec3 fpCorner1, Vec3 fpCorner2) {
         updImpl().setParameters(stiffness, dissipation, staticFriction,
-            dynamicFriction, viscousFriction, transitionVelocity, cf, bd, bv);
+            dynamicFriction, viscousFriction, transitionVelocity, cf, bd, bv,
+            fpTanhCoeff, fpCorner1, fpCorner2);
     }
 
     void SmoothSphereClosedHalfSpaceForceImpl::setParameters
     (Real stiffness, Real dissipation, Real staticFriction,
         Real dynamicFriction, Real viscousFriction, Real transitionVelocity, Real
-        cf, Real bd, Real bv) {
+        cf, Real bd, Real bv, Real fpTanhCoeff, Vec3 fpCorner1, Vec3 fpCorner2) {
         updParameters() = Parameters(stiffness, dissipation, staticFriction,
-            dynamicFriction, viscousFriction, transitionVelocity, cf, bd, bv);
+            dynamicFriction, viscousFriction, transitionVelocity, cf, bd, bv,
+            fpTanhCoeff, fpCorner1, fpCorner2);
     }
 
     void SmoothSphereClosedHalfSpaceForce::setStiffness(Real stiffness) {
@@ -137,6 +139,28 @@ namespace SimTK {
 
     void SmoothSphereClosedHalfSpaceForceImpl::setHuntCrossleySmoothing(Real bv) {
         parameters.bv = bv;
+    }
+
+    void SmoothSphereClosedHalfSpaceForce::setFPDiagonalCorners(
+        Vec3 fpCorner1, Vec3 fpCorner2) {
+            updImpl().parameters.fpCorner1 = fpCorner1;
+            updImpl().parameters.fpCorner2 = fpCorner2;
+    }
+
+    void SmoothSphereClosedHalfSpaceForceImpl::setFPDiagonalCorners(
+        Vec3 fpCorner1, Vec3 fpCorner2) {
+        parameters.fpCorner1 = fpCorner1;
+        parameters.fpCorner2 = fpCorner2;
+    }
+
+    void SmoothSphereClosedHalfSpaceForce::setFPTanhCoeff(
+        Real fpTanhCoeff) {
+        updImpl().parameters.fpTanhCoeff;
+    }
+
+    void SmoothSphereClosedHalfSpaceForceImpl::setFPTanhCoeff(
+        Real fpTanhCoeff) {
+        parameters.fpTanhCoeff;
     }
 
     void SmoothSphereClosedHalfSpaceForce::setContactSphereBody(
@@ -306,8 +330,22 @@ namespace SimTK {
         const Real bd = parameters.bd;
         const Real bv = parameters.bv;
 
-        // Half space boundaries
-        double hs_boundaries[4] = { -0.5, 0.5, -0.5, 0.5 };
+        // Get closed half space boundaries from platform diagonal corners
+        // We only care about the projection of the platofrm in the X-Z plane
+        // in this simple implementation. Given corners (X0, Y0, Z0) and 
+        // (X1, Y1, Z1), then define: hs_boundaries = {X0, X1, Z0, Z1}. We 
+        // sort the elements such that X0 < X1 and Z0 < Z1.
+        Vec3 fpC1 = parameters.fpCorner1;
+        Vec3 fpC2 = parameters.fpCorner2;
+        Real hs_boundaries[4] = { fpC1[0], fpC2[0], fpC1[2], fpC2[2] };
+        if (fpC1[0] > fpC2[0]) { 
+            hs_boundaries[0] = fpC2[0];
+            hs_boundaries[1] = fpC1[0];
+        }
+        if (fpC1[2] > fpC2[2]) {
+            hs_boundaries[2] = fpC2[2];
+            hs_boundaries[3] = fpC1[2];
+        }
 
         // Calculate the Hertz force.
         const Real k = (1. / 2.) * std::pow(stiffness, 2. / 3.);
@@ -334,10 +372,13 @@ namespace SimTK {
         const Real ff = fhc_smooth * (std::min(vrel, Real(1)) *
             (ud + 2 * (us - ud) / (1 + vrel * vrel)) + uv * vslip);
         force += ff * (vtangent) / vslip;
-        // Assume the half-space is a closed rectangle with corners given by:
-        // (x0, z0), (x1, z0), (x0, z1), (x1, z1), where:
-        // x0 = hs_boundaries[0], x1 = hs_boundaries[1]
-        // z0 = hs_boundaries[2], z1 = hs_boundaries[3]
+        // Smoothly adjust the force depending on whether the contact sphere
+        // is within the boundaries of the platform in the X-Z plane. Outside
+        // the boundaries the force should be zero. This implementaiton uses
+        // tanh smoothing functions as boundary functions to define the edges
+        // of the platform. A body sliding off the edge of the platform will
+        // experience smooth but rapid reduction of forces to zero.
+        Real coeff = parameters.fpTanhCoeff;
         Real contact_sphere_edge_pos[4];
         contact_sphere_edge_pos[0] = contactSphereOriginInGround[0] 
             + contactSphereRadius; // xmin
@@ -348,13 +389,13 @@ namespace SimTK {
         contact_sphere_edge_pos[3] = contactSphereOriginInGround[2] 
             - contactSphereRadius; // zmax
         force = force 
-            * (0.5 + 0.5 * std::tanh(1e6 *
+            * (0.5 + 0.5 * std::tanh(coeff *
                 (contact_sphere_edge_pos[0] - hs_boundaries[0])))
-            * (0.5 + 0.5 * std::tanh(-1e6 * 
+            * (0.5 + 0.5 * std::tanh(-coeff * 
                 (contact_sphere_edge_pos[1] - hs_boundaries[1])))
-            * (0.5 + 0.5 * std::tanh(1e6 *
+            * (0.5 + 0.5 * std::tanh(coeff *
                 (contact_sphere_edge_pos[2] - hs_boundaries[2])))
-            * (0.5 + 0.5 * std::tanh(-1e6 *
+            * (0.5 + 0.5 * std::tanh(-coeff *
                 (contact_sphere_edge_pos[3] - hs_boundaries[3])));
         
         // Apply the force to the bodies.

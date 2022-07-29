@@ -167,7 +167,8 @@ namespace SimTK {
             the tanh used to smooth the Hunt-Crossley force, default is 50 */
         void setParameters(Real stiffness, Real dissipation, Real staticFriction,
             Real dynamicFriction, Real viscousFriction, Real transitionVelocity,
-            Real cf, Real bd, Real bv);
+            Real cf, Real bd, Real bv, Real fpTanhCoeff,
+            Vec3 fpCorner1, Vec3 fpCorner2);
         /** Set the stiffness constant (i.e., plain strain modulus), default is 1
             (N/m^2). */
         void setStiffness(Real stiffness);
@@ -192,6 +193,10 @@ namespace SimTK {
             steeper the transition but also the more discontinuous, default
             is 50. */
         void setHuntCrossleySmoothing(Real bv);
+        // Set the coefficient of the tanh boundary function arguments
+        void setFPTanhCoeff(Real fpTanhCoeff);
+        /** Set the diagnoal corners of the platform **/
+        void setFPDiagonalCorners(Vec3 fpCorner1, Vec3 fpCorner2);
         /** Set the MobilizedBody to which the contact sphere is attached. */
         void setContactSphereBody(MobilizedBody bodyInput1);
         /** Set the location of the contact sphere in the body frame. */
