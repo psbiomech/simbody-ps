@@ -52,19 +52,21 @@ namespace SimTK {
     void SmoothSphereClosedHalfSpaceForce::setParameters
     (Real stiffness, Real dissipation, Real staticFriction,
         Real dynamicFriction, Real viscousFriction, Real transitionVelocity, Real
-        cf, Real bd, Real bv, Real fpTanhCoeff, Vec3 fpCorner1, Vec3 fpCorner2) {
+        cf, Real bd, Real bv, Real fpTanhCoeff, Vec3 fpCenter, Real fpXdim,
+        Real fpZdim) {
         updImpl().setParameters(stiffness, dissipation, staticFriction,
             dynamicFriction, viscousFriction, transitionVelocity, cf, bd, bv,
-            fpTanhCoeff, fpCorner1, fpCorner2);
+            fpTanhCoeff, fpCenter, fpXdim, fpZdim);
     }
 
     void SmoothSphereClosedHalfSpaceForceImpl::setParameters
     (Real stiffness, Real dissipation, Real staticFriction,
         Real dynamicFriction, Real viscousFriction, Real transitionVelocity, Real
-        cf, Real bd, Real bv, Real fpTanhCoeff, Vec3 fpCorner1, Vec3 fpCorner2) {
+        cf, Real bd, Real bv, Real fpTanhCoeff, Vec3 fpCenter, Real fpXdim,
+        Real fpZdim) {
         updParameters() = Parameters(stiffness, dissipation, staticFriction,
             dynamicFriction, viscousFriction, transitionVelocity, cf, bd, bv,
-            fpTanhCoeff, fpCorner1, fpCorner2);
+            fpTanhCoeff, fpCenter, fpXdim, fpZdim);
     }
 
     void SmoothSphereClosedHalfSpaceForce::setStiffness(Real stiffness) {
@@ -141,16 +143,18 @@ namespace SimTK {
         parameters.bv = bv;
     }
 
-    void SmoothSphereClosedHalfSpaceForce::setFPDiagonalCorners(
-        Vec3 fpCorner1, Vec3 fpCorner2) {
-            updImpl().parameters.fpCorner1 = fpCorner1;
-            updImpl().parameters.fpCorner2 = fpCorner2;
+    void SmoothSphereClosedHalfSpaceForce::setFPInfo(
+        Vec3 fpCenter, Real fpXdim, Real fpZdim) {
+            updImpl().parameters.fpCenter = fpCenter;
+            updImpl().parameters.fpXdim = fpXdim;
+            updImpl().parameters.fpZdim = fpZdim;
     }
 
-    void SmoothSphereClosedHalfSpaceForceImpl::setFPDiagonalCorners(
-        Vec3 fpCorner1, Vec3 fpCorner2) {
-        parameters.fpCorner1 = fpCorner1;
-        parameters.fpCorner2 = fpCorner2;
+    void SmoothSphereClosedHalfSpaceForceImpl::setFPInfo(
+        Vec3 fpCenter, Real fpXdim, Real fpZdim) {
+        parameters.fpCenter = fpCenter;
+        parameters.fpXdim = fpXdim;
+        parameters.fpZdim = fpZdim;
     }
 
     void SmoothSphereClosedHalfSpaceForce::setFPTanhCoeff(
@@ -330,22 +334,17 @@ namespace SimTK {
         const Real bd = parameters.bd;
         const Real bv = parameters.bv;
 
-        // Get closed half space boundaries from platform diagonal corners
-        // We only care about the projection of the platofrm in the X-Z plane
-        // in this simple implementation. Given corners (X0, Y0, Z0) and 
-        // (X1, Y1, Z1), then define: hs_boundaries = {X0, X1, Z0, Z1}. We 
-        // sort the elements such that X0 < X1 and Z0 < Z1.
-        Vec3 fpC1 = parameters.fpCorner1;
-        Vec3 fpC2 = parameters.fpCorner2;
-        Real hs_boundaries[4] = { fpC1[0], fpC2[0], fpC1[2], fpC2[2] };
-        if (fpC1[0] > fpC2[0]) { 
-            hs_boundaries[0] = fpC2[0];
-            hs_boundaries[1] = fpC1[0];
-        }
-        if (fpC1[2] > fpC2[2]) {
-            hs_boundaries[2] = fpC2[2];
-            hs_boundaries[3] = fpC1[2];
-        }
+        // Determine the lines representing the edges of the force plate in the X-Z
+        // plane from the platform center and dimensions.
+        Vec3 fpCenter = parameters.fpCenter;
+        Real fpXdim = parameters.fpXdim;
+        Real fpZdim = parameters.fpZdim;
+        Real x0 = fpCenter[0] - (fpXdim / 2);
+        Real x1 = fpCenter[0] + (fpXdim / 2);
+        Real z0 = fpCenter[2] - (fpZdim / 2);
+        Real z1 = fpCenter[2] + (fpZdim / 2);
+        Real hs_boundaries[4] = { x0, x1, z0, z1 };
+
 
         // Calculate the Hertz force.
         const Real k = (1. / 2.) * std::pow(stiffness, 2. / 3.);
