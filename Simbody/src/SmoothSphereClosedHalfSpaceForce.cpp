@@ -7,7 +7,7 @@
  * Medical Research, grant U54 GM072970. See https://simtk.org/home/simbody.  *
  *                                                                            *
  * Portions copyright (c) 2008-19 Stanford University and the Authors.        *
- * Authors: Prasanna Sritharan, Antoine Falisse, Gil Serrancoli               *
+ * Authors: Antoine Falisse, Gil Serrancoli                                   *
  * Contributors: Peter Eastman                                                *
  *                                                                            *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may    *
