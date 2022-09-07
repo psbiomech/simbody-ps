@@ -371,31 +371,43 @@ namespace SimTK {
         const Real ff = fhc_smooth * (std::min(vrel, Real(1)) *
             (ud + 2 * (us - ud) / (1 + vrel * vrel)) + uv * vslip);
         force += ff * (vtangent) / vslip;
-        // Smoothly adjust the force depending on whether the contact sphere
+        // Smoothly adjust the force depending on whether the contact point
         // is within the boundaries of the platform in the X-Z plane. Outside
         // the boundaries the force should be zero. This implementaiton uses
         // tanh smoothing functions as boundary functions to define the edges
         // of the platform. A body sliding off the edge of the platform will
-        // experience smooth but rapid reduction of forces to zero.
+        // experience smooth but rapid reduction of forces to zero. This is a
+        // gross approximation, and treats spheres in partial contact as 
+        // either fully on or fully off, and is only acceptable if the contact
+        // radius is considered small relative to the plate area.
         Real coeff = parameters.fpTanhCoeff;
-        Real contact_sphere_edge_pos[4];
-        contact_sphere_edge_pos[0] = contactSphereOriginInGround[0] 
-            + contactSphereRadius; // xmin
-        contact_sphere_edge_pos[1] = contactSphereOriginInGround[0] 
-            - contactSphereRadius; // xmax
-        contact_sphere_edge_pos[2] = contactSphereOriginInGround[2] 
-            + contactSphereRadius; // zmin
-        contact_sphere_edge_pos[3] = contactSphereOriginInGround[2] 
-            - contactSphereRadius; // zmax
+        //Real contact_sphere_edge_pos[4];
+        //contact_sphere_edge_pos[0] = contactSphereOriginInGround[0] 
+        //    + contactSphereRadius; // xmin
+        //contact_sphere_edge_pos[1] = contactSphereOriginInGround[0] 
+        //    - contactSphereRadius; // xmax
+        //contact_sphere_edge_pos[2] = contactSphereOriginInGround[2] 
+        //    + contactSphereRadius; // zmin
+        //contact_sphere_edge_pos[3] = contactSphereOriginInGround[2] 
+        //    - contactSphereRadius; // zmax
+        //force = force 
+        //    * (0.5 + 0.5 * std::tanh(coeff *
+        //        (contact_sphere_edge_pos[0] - hs_boundaries[0])))
+        //    * (0.5 + 0.5 * std::tanh(-coeff * 
+        //        (contact_sphere_edge_pos[1] - hs_boundaries[1])))
+        //    * (0.5 + 0.5 * std::tanh(coeff *
+        //        (contact_sphere_edge_pos[2] - hs_boundaries[2])))
+        //    * (0.5 + 0.5 * std::tanh(-coeff *
+        //        (contact_sphere_edge_pos[3] - hs_boundaries[3])));
         force = force 
             * (0.5 + 0.5 * std::tanh(coeff *
-                (contact_sphere_edge_pos[0] - hs_boundaries[0])))
+                (contactPointPositionAdjustedInGround[0] - hs_boundaries[0])))
             * (0.5 + 0.5 * std::tanh(-coeff * 
-                (contact_sphere_edge_pos[1] - hs_boundaries[1])))
+                (contactPointPositionAdjustedInGround[0] - hs_boundaries[1])))
             * (0.5 + 0.5 * std::tanh(coeff *
-                (contact_sphere_edge_pos[2] - hs_boundaries[2])))
+                (contactPointPositionAdjustedInGround[2] - hs_boundaries[2])))
             * (0.5 + 0.5 * std::tanh(-coeff *
-                (contact_sphere_edge_pos[3] - hs_boundaries[3])));
+                (contactPointPositionAdjustedInGround[2] - hs_boundaries[3])));
         
         // Apply the force to the bodies.
         bodySphere.applyForceToBodyPoint(state, station1, -force, bodyForces);
